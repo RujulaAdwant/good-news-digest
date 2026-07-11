@@ -1,0 +1,148 @@
+# Good News Digest — Cursor Rules
+# Python backend project by Rujula (UMich CS, rising junior)
+# Stack: FastAPI, PostgreSQL, APScheduler, sentence-transformers,
+# HuggingFace transformers, Anthropic Claude API, SendGrid
+# Full implementation plan: see implementation_plan.md in project root
+
+---
+
+## Project Context
+
+This is a personal news digest service that fetches articles, deduplicates
+them using NLP embedding similarity, filters for positive/constructive stories
+via sentiment classification, summarizes with Claude API, and delivers a daily
+email. Backend only — no frontend in v1.
+
+Pipeline order:
+Fetch → Store → Deduplicate → Score Sentiment → Summarize → Compile → Email
+
+---
+
+## Communication Style
+
+- Treat me like a peer — skip explaining basic Python or SQL concepts
+- Do explain non-obvious design decisions, tradeoffs, and ML concepts
+- Be direct and concise — no filler
+- If there are multiple valid approaches, briefly note the tradeoff before picking one
+
+---
+
+## Code Style
+
+- Always explain what you're about to write and why before writing it
+- Write production-ready code: full type hints, docstrings, logging, error handling
+- Use Python 3.11+ features where appropriate (e.g. `match`, `X | Y` union types)
+- Follow PEP 8 strictly
+- Prefer explicit over implicit — no clever one-liners that sacrifice readability
+- Use `logging` module, never `print` for pipeline output
+- All functions must have a docstring explaining purpose, args, and return value
+- Use Pydantic models for all FastAPI request/response schemas
+
+---
+
+## Architecture Rules
+
+- Every pipeline stage (fetch, deduplicate, sentiment, summarize, email) lives
+  in its own module — never mix concerns across files
+- Database logic belongs in a dedicated `db/` layer, not scattered in route handlers
+- All API keys and config loaded via `python-dotenv` from `.env` — never hardcoded
+- Use `psycopg2` with context managers for all DB connections (no leaked connections)
+- All DB inserts use `ON CONFLICT DO NOTHING` on URL to prevent duplicates at
+  the storage layer
+
+---
+
+## NLP / ML Rules
+
+- Always explain the model being used and why before writing ML code
+- For deduplication: use `all-MiniLM-L6-v2` from sentence-transformers
+- For sentiment: use `distilbert-base-uncased-finetuned-sst-2-english` via
+  HuggingFace pipeline
+- Load models once at module level — never reload on every function call
+- Cosine similarity threshold for deduplication: start at 0.85 (tunable via env var)
+- Sentiment threshold: start at 0.6 (tunable via env var)
+- Always note when a threshold is a starting point that needs tuning
+
+---
+
+## Database Rules
+
+- All queries use parameterized statements — no string formatting in SQL
+- Every table interaction should be wrapped in try/except with logged errors
+- Use SERIAL primary keys, UNIQUE constraint on article URLs
+- Never do N+1 queries — fetch in batches
+- Always explain the SQL before writing it, especially JOINs or array operations
+
+---
+
+## API Rules
+
+- FastAPI only — no Flask
+- All endpoints must have response_model defined
+- Use HTTP status codes correctly (201 for creates, 404 for not found, etc.)
+- Every endpoint gets a docstring that appears in /docs
+- Async only where there's a real reason (external I/O) — don't async everything
+  by default
+
+---
+
+## Error Handling Rules
+
+- Every pipeline stage must have its own try/except — one stage failing should
+  not crash the whole pipeline
+- Log errors with enough context to debug: include article URL, stage name,
+  exception type
+- Raise custom exceptions for domain errors (e.g. `SentimentScoringError`,
+  `DuplicateDetectionError`) rather than bare `Exception`
+- Never silently swallow errors
+
+---
+
+## Claude API Rules
+
+- Model: always use `claude-sonnet-4-6`
+- max_tokens: 150 for summaries — no more needed
+- Only call Claude after sentiment filtering — never summarize articles that
+  will be discarded
+- Cache summaries in PostgreSQL `summary` column — never re-summarize the
+  same article
+- Wrap all Claude calls in try/except with retry logic (max 2 retries)
+
+---
+
+## Testing Rules
+
+- Always suggest a unit test after writing a function
+- Tests go in `tests/` mirroring the `app/` structure
+- Use `pytest`
+- Mock all external API calls (NewsAPI, Claude, SendGrid) in tests — never
+  hit real APIs in test suite
+- For NLP functions, suggest at least one test with a known duplicate pair
+  and one with clearly distinct articles
+
+---
+
+## Anti-Vibecoding Reminders
+
+- If I paste code I don't understand and ask you to fix it, ask me to explain
+  what I think it does first
+- Flag any concept that would likely come up in a SWE internship interview
+  with a comment: `# INTERVIEW: understand this`
+- When writing ML/NLP code, always include a comment explaining the math or
+  intuition in plain English
+- If I'm about to do something that works but I probably won't understand,
+  suggest a simpler version I'll be able to explain first
+
+---
+
+## Environment Variables Expected
+
+ANTHROPIC_API_KEY=
+NEWSAPI_KEY=
+SENDGRID_API_KEY=
+SENDGRID_FROM_EMAIL=
+DATABASE_URL=
+DIGEST_RECIPIENT_EMAIL=
+SIMILARITY_THRESHOLD=0.85
+SENTIMENT_THRESHOLD=0.6
+DIGEST_HOUR=7

@@ -1,0 +1,11 @@
+fastapi
+uvicorn
+psycopg2-binary
+feedparser
+newsapi-python
+sentence-transformers
+transformers
+anthropic
+sendgrid
+apscheduler
+python-dotenv

@@ -23,7 +23,7 @@ Fetch → Store → Deduplicate → Score Sentiment → Summarize → Compile �
 - Treat me like a peer — skip explaining basic Python or SQL concepts
 - Do explain non-obvious design decisions, tradeoffs, and ML concepts
 - Be direct and concise — no filler
-- If there are multiple valid approaches, briefly note the tradeoff before picking one
+- If there are multiple valid approaches, briefly note the tradeoffs before asking me to pick one
 
 ---
 

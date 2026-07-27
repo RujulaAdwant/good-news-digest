@@ -2,10 +2,12 @@ fastapi
 uvicorn
 psycopg2-binary
 feedparser
-newsapi-python
+httpx
 sentence-transformers
 transformers
 anthropic
 sendgrid
 apscheduler
 python-dotenv
+pytest
+httpx

@@ -220,3 +220,4 @@ __marimo__/
 .venv/
 .env
 *.pyc
+doc/bugs.md

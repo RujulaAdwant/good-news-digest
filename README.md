@@ -1,8 +1,17 @@
-# Good News Digest
+# The Glass Digest
 
-A personal backend service that fetches the day's news, filters for constructive stories with NLP, summarizes them with Claude, and emails a short morning digest.
+A daily email digest that cuts through sensational news cycles to surface constructive, solutions-oriented stories.
 
-Built as a portfolio backend project: FastAPI + PostgreSQL + embedding-based dedup + sentiment classification + scheduled delivery. No frontend in v1.
+## The Why
+What's the first thing you do when you wake up in the morning? I wish I could tell you that I open my eyes at the first ring of my old-school alarm clock, straight out of a 2000's movie, and seize the day.
+
+My mornings typically look more like reaching for my phone to access my alarm app and immediately checking my email. In an attempt to replace social media, I tap into my news apps, only to feel overwhelmed by an abundance of information and the headlines' striking negativity.
+
+Headlines are sensational by design. They are meant, like so many other agents of influence, to capture our attention spans in the hopes that we let our mind linger on an idea for a bit before moving onto the next shiny thing that catches our eye. 
+
+When I open my news apps in the morning, I want my attention to be directed to the issues and events that matter. Scrolling through top headlines enables me to achieve this. However, the mental fatigue I face upon confronting predictions of impending doom isn't always what I signed up for.
+
+The Glass Digest isn't trying to replace real journalism or the hard truths it covers. It's a way to start my day as a curious student of the world, learning about what's happening through stories that inform without provoking dread.
 
 ## Pipeline
 
@@ -145,3 +154,17 @@ Starting points — adjust after a few real digests:
 ## Project layout
 
 See [`INDEX.md`](INDEX.md). Design walkthrough and interview notes live under [`docs/`](docs/).
+
+## Demo 
+{coming soon!}
+
+
+## Future improvements
+- Digest history web UI — a lightweight React frontend to browse past digests without hitting the API directly
+- Feedback loop — thumbs up/down per article, feeding into per-source or per-topic filtering over time
+- Topic clustering — group digest picks by theme (e.g. science, climate, innovation) using the same embeddings already computed for deduplication
+- Multi-user support — Google OAuth + per-user source preferences and delivery times
+- Fine-tuned sentiment model — once enough feedback data exists, move beyond off-the-shelf DistilBERT toward a model tuned specifically on constructive-news examples
+
+## License
+MIT

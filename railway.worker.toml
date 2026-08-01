@@ -1,0 +1,16 @@
+# Railway defaults for the daily scheduler worker.
+# In the Railway dashboard for this service:
+#   Settings → Config-as-code → set path to ``railway.worker.toml``
+#   (or Config File = railway.worker.toml)
+# Do NOT use the API ``railway.toml`` here — it healthchecks /health, which
+# this process does not serve.
+#
+# Also copy/reference the same Variables as the API, including DATABASE_URL
+# from the Postgres plugin.
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+startCommand = "python scheduler.py"
+restartPolicyType = "ON_FAILURE"

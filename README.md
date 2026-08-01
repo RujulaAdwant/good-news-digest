@@ -89,30 +89,35 @@ You need **two services** from the same repo (API + scheduler) plus a Postgres p
 
 1. Push this repo to GitHub (already: `RujulaAdwant/good-news-digest`).
 2. [Railway](https://railway.app) → New Project → Deploy from GitHub.
-3. Add a **PostgreSQL** plugin; copy its `DATABASE_URL` into the app service.
-4. **API service**
-   - Builder: Dockerfile (see `railway.toml`)
-   - Start: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
-   - Health check path: `/health`
-5. **Worker service** (same repo)
-   - Same Dockerfile / env
-   - Start: `python scheduler.py`
-6. Set env vars on **both** services (from `.env.example`):
+3. Add a **PostgreSQL** plugin.
+4. **API service** (the first GitHub service)
+   - Config-as-code: `railway.toml` (Dockerfile + `/health` check)
+   - Public domain under Networking
+   - Variables: reference Postgres `DATABASE_URL`, plus API keys (see below)
+5. **Worker service** (add a *second* service from the same repo)
+   - Settings → Config-as-code / config file: **`railway.worker.toml`**
+     (not `railway.toml` — the API file healthchecks `/health`, which the
+     scheduler does not expose)
+   - Start command is set in that file: `python scheduler.py`
+   - **No** public domain
+   - **Same Variables as the API**, including `DATABASE_URL` (Add Reference →
+     Postgres → `DATABASE_URL`). Missing `DATABASE_URL` crashes on boot.
+6. Shared env vars on **both** services (from `.env.example`):
 
    `DATABASE_URL`, `THENEWSAPI_KEY`, `ANTHROPIC_API_KEY`, `SENDGRID_API_KEY`,
    `SENDGRID_FROM_EMAIL`, `DIGEST_RECIPIENT_EMAIL`, plus optional tunables
-   (`SIMILARITY_THRESHOLD`, `SENTIMENT_THRESHOLD`, `DIGEST_SIZE`,
-   `TOPIC_DIVERSITY_THRESHOLD`, `DIGEST_HOUR`, `DIGEST_TIMEZONE`,
-   `FETCH_WINDOW_HOURS`, `DIGEST_BANNER_URL`). Keep `ALLOW_DIGEST_RESET=false`
-   in production.
+   (`SIMILARITY_THRESHOLD`, `SENTIMENT_THRESHOLD`, `SENTIMENT_TARGET`,
+   `DIGEST_SIZE`, `TOPIC_DIVERSITY_THRESHOLD`, `DIGEST_HOUR`, `DIGEST_TIMEZONE`,
+   `FETCH_WINDOW_HOURS`). Keep `ALLOW_DIGEST_RESET=false` in production.
 
-7. One-time schema: Railway shell / one-off run:
+7. One-time schema: Railway shell on the **API** service:
 
    ```bash
    python -m db.migrate
    ```
 
-**Note:** First boot downloads HuggingFace models (`all-MiniLM-L6-v2`, DistilBERT). Prefer a plan with enough RAM/disk; the Dockerfile installs CPU PyTorch to avoid CUDA wheels.
+**Note:** First boot downloads HuggingFace models (`all-MiniLM-L6-v2`, DistilBERT). Prefer a plan with enough RAM/disk; the Dockerfile installs CPU PyTorch to avoid CUDA wheels. Manual `POST /process` can take minutes on cold start; Railway’s edge may time out even when the job is still running — the worker avoids that for the daily cron.
+
 
 ## Tunables
 

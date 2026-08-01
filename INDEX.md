@@ -24,7 +24,8 @@ good-news-digest/
 ├── images/               # Local banner assets (not used in email yet)
 ├── scheduler.py          # APScheduler daily pipeline
 ├── Dockerfile            # Railway / CPU torch image
-├── railway.toml          # API service defaults
+├── railway.toml          # API service (uvicorn + /health)
+├── railway.worker.toml   # Scheduler worker (no HTTP healthcheck)
 ├── run.sh                # Local uvicorn helper
 ├── .env                  # Secrets — never commit
 ├── .env.example          # Documented env vars

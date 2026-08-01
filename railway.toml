@@ -1,10 +1,11 @@
-# Railway service defaults for the API. Create a second service from the same
-# repo with start command ``python scheduler.py`` for the daily worker.
+# Railway defaults for the HTTP API service only.
+# Worker service must use ``railway.worker.toml`` (no /health check).
 [build]
 builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile"
 
 [deploy]
+startCommand = "uvicorn app.main:app --host 0.0.0.0 --port $PORT"
 healthcheckPath = "/health"
 healthcheckTimeout = 30
 restartPolicyType = "ON_FAILURE"

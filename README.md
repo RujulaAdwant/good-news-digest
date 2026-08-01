@@ -3,13 +3,13 @@
 A daily email digest that cuts through sensational news cycles to surface constructive, solutions-oriented stories.
 
 ## The Why
-What's the first thing you do when you wake up in the morning? I wish I could tell you that I open my eyes at the first ring my old-school alarm clock, straight out of a 2000's movie, and jump headfirst into seizing the day.
+What's the first thing you do when you wake up in the morning? I wish I could tell you that I open my eyes at the first ring of my old-school alarm clock, straight out of a 2000's movie, and seize the day.
 
-My mornings typically look more like reaching for the Snooze or Dismiss button on my phone's alarm app, and once awake, immediately checking my email to catch up on any messages I missed. Often, in an attempt to replace the social media dopamine craving first thing in the morning, I tap into my news apps, only to feel overwhelmed by an abundance of information and the headlines' striking negativity.
+My mornings typically look more like reaching for my phone's alarm app and immediately checking my email. In an attempt to replace social media first thing in the morning, I tap into my news apps, only to feel overwhelmed by an abundance of information and the headlines' striking negativity.
 
 Headlines are sensational by design. They are meant, like so many other agents of influence, to capture our attention spans in the hopes that we let our mind linger on an idea for a bit before moving onto the next shiny thing that catches our eye. 
 
-When I open my news apps in the morning, I want my attention to be diverted to the issues and events that matter. I consistently achieve this goal by scrolling through top headlines. However, the sense of mental fatigue that I face upon confronting predictions of impending doom isn't always what I signed up for.
+When I open my news apps in the morning, I want my attention to be diverted to the issues and events that matter. Scrolling through top headlines enables me to achieve this. However, the mental fatigue I face upon confronting predictions of impending doom isn't always what I signed up for.
 
 The Glass Digest isn't trying to replace real journalism or the hard truths it covers. It's a way to start my day as a curious student of the world, learning about what's happening through stories that inform without provoking dread.
 

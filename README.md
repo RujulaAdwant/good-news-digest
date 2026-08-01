@@ -9,7 +9,7 @@ My mornings typically look more like reaching for my phone to access my alarm ap
 
 Headlines are sensational by design. They are meant, like so many other agents of influence, to capture our attention spans in the hopes that we let our mind linger on an idea for a bit before moving onto the next shiny thing that catches our eye. 
 
-When I open my news apps in the morning, I want my attention to be diverted to the issues and events that matter. Scrolling through top headlines enables me to achieve this. However, the mental fatigue I face upon confronting predictions of impending doom isn't always what I signed up for.
+When I open my news apps in the morning, I want my attention to be directed to the issues and events that matter. Scrolling through top headlines enables me to achieve this. However, the mental fatigue I face upon confronting predictions of impending doom isn't always what I signed up for.
 
 The Glass Digest isn't trying to replace real journalism or the hard truths it covers. It's a way to start my day as a curious student of the world, learning about what's happening through stories that inform without provoking dread.
 

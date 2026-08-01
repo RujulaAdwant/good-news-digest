@@ -5,7 +5,7 @@ A daily email digest that cuts through sensational news cycles to surface constr
 ## The Why
 What's the first thing you do when you wake up in the morning? I wish I could tell you that I open my eyes at the first ring of my old-school alarm clock, straight out of a 2000's movie, and seize the day.
 
-My mornings typically look more like reaching for my phone to access my alarm app and immediately checking my email. In an attempt to replace social media first thing in the morning, I tap into my news apps, only to feel overwhelmed by an abundance of information and the headlines' striking negativity.
+My mornings typically look more like reaching for my phone to access my alarm app and immediately checking my email. In an attempt to replace social media, I tap into my news apps, only to feel overwhelmed by an abundance of information and the headlines' striking negativity.
 
 Headlines are sensational by design. They are meant, like so many other agents of influence, to capture our attention spans in the hopes that we let our mind linger on an idea for a bit before moving onto the next shiny thing that catches our eye. 
 

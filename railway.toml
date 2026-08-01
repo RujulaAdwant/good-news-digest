@@ -1,11 +1,14 @@
 # Railway defaults for the HTTP API service only.
 # Worker service must use ``railway.worker.toml`` (no /health check).
+#
+# startCommand must go through a shell so ``$PORT`` expands. A bare
+# ``uvicorn ... --port $PORT`` passes the literal string and crashes.
 [build]
 builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile"
 
 [deploy]
-startCommand = "uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+startCommand = "sh -c 'uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}'"
 healthcheckPath = "/health"
 healthcheckTimeout = 30
 restartPolicyType = "ON_FAILURE"

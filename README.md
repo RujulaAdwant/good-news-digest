@@ -5,13 +5,13 @@ A daily email digest that cuts through sensational news cycles to surface constr
 ## The Why
 What's the first thing you do when you wake up in the morning? I wish I could tell you that I open my eyes at the first ring my old-school alarm clock, straight out of a 2000's movie, and jump headfirst into seizing the day. No hesitation, no screens, and no delay. 
 
-My mornings typically look more like reaching for the Snooze or Dismiss button on my phone's alarm app, and once awake, immediately checking my email to catch up on any messages I missed. Often, in an attempt to replace the social media dopamine craving first thing in the morning, I tap into my news apps, only to feel overwhelmed by the abundance of information and the headlines' striking negativity.
+My mornings typically look more like reaching for the Snooze or Dismiss button on my phone's alarm app, and once awake, immediately checking my email to catch up on any messages I missed. Often, in an attempt to replace the social media dopamine craving first thing in the morning, I tap into my news apps, only to feel overwhelmed by an abundance of information and the headlines' striking negativity.
 
 Headlines are sensational by design. They are meant, like so many other agents in our modern world, to capture our attention spans in the hopes that we let our mind linger on an idea for a bit before moving onto the next shiny thing that catches our eye. 
 
-When I open my news apps in the morning, I want my attention to be diverted to the issues and events that matter. I consistently achieve this goal by scrolling through top headlines. However, the sense of mental fatigue that I face upon confronting all of the issues and predicted impending doom in the world isn't always what I signed up for. 
+When I open my news apps in the morning, I want my attention to be diverted to the issues and events that matter. I consistently achieve this goal by scrolling through top headlines. However, the sense of mental fatigue that I face upon confronting predictions of impending doom isn't always what I signed up for.
 
-I don't aim to replace traditional news sources and the invaluable perspectives they can provide with The Glass Digest. Instead, I hope to find a way to direct my attention to verified, constructive sources on current events to begin my morning. With a daily email sent from The Glass Digest, I can  start my morning as a curious student of the world learning of neutral and positive headlines that don't compete to grab my interest by provoking negative emotions. 
+I don't aim to replace traditional news sources and the invaluable perspectives they can provide with The Glass Digest. Instead, I hope to find a way to direct my attention to verified, constructive sources on current events to begin my morning. With a daily email sent from The Glass Digest, I can  start my morning as a curious student of the world learning from stories that don't provoke negative emotions just to pique my interest. 
 
 ## Pipeline
 

@@ -19,7 +19,7 @@ Build and test each stage independently before connecting them.
 - [ ] Create GitHub repo, push empty project skeleton
 - [ ] Set up Python 3.11+ virtual environment
 - [ ] Install PostgreSQL locally
-- [ ] Create accounts: NewsAPI, SendGrid, Anthropic
+- [ ] Create accounts: TheNewsAPI, SendGrid, Anthropic
 - [ ] Add `.env` file with all API keys
 - [ ] Add `.env` to `.gitignore`
 - [ ] Create `.cursorrules` file in project root
@@ -30,7 +30,7 @@ Build and test each stage independently before connecting them.
 good-news-digest/
 ├── app/
 │   ├── main.py          # FastAPI app
-│   ├── fetcher.py       # RSS + NewsAPI ingestion
+│   ├── fetcher.py       # RSS + TheNewsAPI ingestion
 │   ├── deduplicator.py  # Embedding similarity
 │   ├── sentiment.py     # Sentiment scoring
 │   ├── summarizer.py    # Claude API calls
@@ -51,13 +51,14 @@ fastapi
 uvicorn
 psycopg2-binary
 feedparser
-newsapi-python
+httpx
 sentence-transformers
 transformers
 anthropic
 sendgrid
 apscheduler
 python-dotenv
+pytest
 ```
 
 **Learning resources for setup**
@@ -98,8 +99,8 @@ CREATE TABLE digests (
 
 **Concepts to understand:** Primary keys, UNIQUE constraints (prevents duplicate URLs), SERIAL auto-increment, why we use TIMESTAMP vs DATE.
 
-### Step 1.2 — NewsAPI integration
-Write `fetcher.py` to call NewsAPI and return a list of article dicts.
+### Step 1.2 — TheNewsAPI integration
+Write `fetcher.py` to call TheNewsAPI and return a list of article dicts.
 
 Test with a small batch first — fetch 10 articles, print titles to terminal, confirm it works before touching the database.
 
@@ -132,7 +133,7 @@ Run with `uvicorn app.main:app --reload` and test in the browser at `localhost:8
 **Concepts to understand:** What an API framework does, path operations, Pydantic response models, why `/docs` works automatically.
 
 **Learning resources**
-- NewsAPI Python client: https://newsapi.org/docs/client-libraries/python
+- TheNewsAPI docs: https://www.thenewsapi.com/documentation
 - feedparser docs: https://feedparser.readthedocs.io/
 - SQL tutorial (if rusty): https://www.postgresqltutorial.com/postgresql-tutorial/postgresql-insert/
 - FastAPI path operations: https://fastapi.tiangolo.com/tutorial/first-steps/
@@ -243,8 +244,10 @@ Test by setting the time to 2 minutes from now, confirming it runs, then changin
 
 **Goal:** Live, deployed service you can demo and link on your resume.
 
-### Step 4.1 — Error handling
+### Step 4.1 — Error handling ✅
 Wrap each pipeline stage in try/except so one failure doesn't crash everything. Log errors clearly.
+
+Done in pipeline modules, `POST /process`, and `scheduler.run_daily_pipeline` (per-stage isolation).
 
 ### Step 4.2 — Deploy to Railway
 - Push code to GitHub
@@ -253,9 +256,12 @@ Wrap each pipeline stage in try/except so one failure doesn't crash everything. 
 - Add all environment variables in Railway dashboard
 - Deploy
 
-Railway is the simplest option for Python + PostgreSQL — no config files needed.
+Scaffolding in-repo: `Dockerfile`, `railway.toml`, `python -m db.migrate`, `GET /health`.
+Follow the **Deploy on Railway** section in `README.md` (API service + scheduler worker).
 
-### Step 4.3 — Write README
+Railway is the simplest option for Python + PostgreSQL — use the Dockerfile so CPU torch / HF models install cleanly.
+
+### Step 4.3 — Write README ✅
 Your README is part of the portfolio. Include:
 - What the project does and why (1 paragraph)
 - Architecture diagram or pipeline description
@@ -271,6 +277,7 @@ Run for 3-4 days. Ask yourself:
 - Does it run every morning without manual intervention?
 
 Adjust sentiment threshold and source list based on real output.
+See README **Tunables** table for env knobs.
 
 **Learning resources**
 - Railway deployment: https://docs.railway.app/getting-started
@@ -304,7 +311,7 @@ For each of these, you should be able to explain it in 2 minutes without notes:
 - [ ] Empty project structure on GitHub
 
 **End of Weekend 1**
-- [ ] Can fetch articles from NewsAPI and 3+ RSS feeds
+- [ ] Can fetch articles from TheNewsAPI and 3+ RSS feeds
 - [ ] Articles stored in PostgreSQL
 - [ ] `/fetch` and `/articles` endpoints working
 - [ ] Can see articles in database via psql or a DB viewer
@@ -321,7 +328,7 @@ For each of these, you should be able to explain it in 2 minutes without notes:
 - [ ] No crashes on bad input or API failures
 
 **End of July**
+- [x] README written
 - [ ] Deployed on Railway
 - [ ] Running autonomously for 3+ days
-- [ ] README written
 - [ ] Link on resume/portfolio

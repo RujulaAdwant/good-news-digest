@@ -2,7 +2,7 @@
 
 import logging
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 
 import psycopg2
 from psycopg2.extras import execute_batch
@@ -47,14 +47,13 @@ _SELECT_FOR_SENTIMENT = f"""
     ORDER BY id ASC
 """
 
-_SELECT_FOR_SUMMARY = f"""
+_SELECT_DIGEST_CANDIDATES = f"""
     SELECT {_ARTICLE_COLUMNS}
     FROM articles
     WHERE published_at >= %s
       AND is_duplicate = FALSE
       AND sentiment_score >= %s
-      AND summary IS NULL
-    ORDER BY id ASC
+    ORDER BY sentiment_score DESC, id ASC
 """
 
 _MARK_DUPLICATES = """
@@ -73,6 +72,30 @@ _UPDATE_SUMMARY = """
     UPDATE articles
     SET summary = %s
     WHERE id = %s
+"""
+
+_CLEAR_SUMMARY = """
+    UPDATE articles
+    SET summary = NULL
+    WHERE id = ANY(%s)
+"""
+
+_SELECT_BY_IDS = f"""
+    SELECT {_ARTICLE_COLUMNS}
+    FROM articles
+    WHERE id = ANY(%s)
+"""
+
+_CLEAR_DIGEST_DATE = """
+    UPDATE articles
+    SET digest_date = NULL
+    WHERE digest_date = %s
+"""
+
+_SET_DIGEST_DATE = """
+    UPDATE articles
+    SET digest_date = %s
+    WHERE id = ANY(%s)
 """
 
 
@@ -251,18 +274,22 @@ def get_articles_needing_sentiment(cutoff: datetime) -> list[ArticleRecord]:
     return [_row_to_article(row) for row in rows]
 
 
-def get_articles_needing_summary(
+def get_digest_candidates(
     cutoff: datetime,
     sentiment_threshold: float,
 ) -> list[ArticleRecord]:
-    """Fetch positive, non-duplicate articles in window without a summary.
+    """Fetch positive, non-duplicate articles in window for digest selection.
+
+    Ordered by sentiment_score descending so callers can greedily pick the
+    most positive stories first. Includes rows that already have a summary
+    (selection is independent of Claude caching).
 
     Args:
         cutoff: Inclusive UTC lower bound on published_at.
         sentiment_threshold: Minimum sentiment_score to include (starting point: 0.6).
 
     Returns:
-        Articles eligible for Claude summarization.
+        Digest pool ordered most-positive first.
 
     Raises:
         psycopg2.Error: If the database query fails.
@@ -270,10 +297,13 @@ def get_articles_needing_summary(
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute(_SELECT_FOR_SUMMARY, (cutoff, sentiment_threshold))
+                cur.execute(
+                    _SELECT_DIGEST_CANDIDATES,
+                    (cutoff, sentiment_threshold),
+                )
                 rows = cur.fetchall()
     except psycopg2.Error:
-        logger.exception("Failed to fetch articles needing summary")
+        logger.exception("Failed to fetch digest candidates")
         raise
 
     return [_row_to_article(row) for row in rows]
@@ -365,3 +395,130 @@ def update_summaries(summaries: list[tuple[int, str]]) -> int:
     logger.info("Updated summaries for %d articles", updated)
     return updated
 
+
+def clear_summaries(article_ids: list[int]) -> int:
+    """Set summary=NULL for the given article ids.
+
+    Used to scrub cached Claude refusal text that must not appear in digests.
+
+    Args:
+        article_ids: Primary keys whose summaries should be cleared.
+
+    Returns:
+        Number of rows updated.
+
+    Raises:
+        psycopg2.Error: If the database update fails.
+    """
+    if not article_ids:
+        return 0
+
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(_CLEAR_SUMMARY, (article_ids,))
+                updated = cur.rowcount
+    except psycopg2.Error:
+        logger.exception("Failed to clear summaries for %d articles", len(article_ids))
+        raise
+
+    logger.info("Cleared summaries for %d articles", updated)
+    return updated
+
+
+def get_articles_by_ids(article_ids: list[int]) -> list[ArticleRecord]:
+    """Fetch articles by id, preserving the caller's order.
+
+    Args:
+        article_ids: Primary keys in digest display order.
+
+    Returns:
+        Matching articles ordered like ``article_ids`` (missing ids dropped).
+
+    Raises:
+        psycopg2.Error: If the database query fails.
+    """
+    if not article_ids:
+        return []
+
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(_SELECT_BY_IDS, (article_ids,))
+                rows = cur.fetchall()
+    except psycopg2.Error:
+        logger.exception("Failed to fetch articles by ids count=%d", len(article_ids))
+        raise
+
+    # Preserve caller order (digest pick order), not SQL return order.
+    articles = [_row_to_article(row) for row in rows]
+    by_id = {article.id: article for article in articles if article.id is not None}
+    return [by_id[article_id] for article_id in article_ids if article_id in by_id]
+
+
+def assign_digest_date(digest_date: date, article_ids: list[int]) -> int:
+    """Stamp selected articles with digest_date; clear prior stamps for that day.
+
+    Recompile-safe: old picks for the same calendar date lose their stamp
+    before the new set is written.
+
+    Args:
+        digest_date: Local digest calendar date.
+        article_ids: Primary keys included in today's digest.
+
+    Returns:
+        Number of articles newly stamped.
+
+    Raises:
+        psycopg2.Error: If either update fails.
+    """
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(_CLEAR_DIGEST_DATE, (digest_date,))
+                if article_ids:
+                    cur.execute(_SET_DIGEST_DATE, (digest_date, article_ids))
+                    stamped = cur.rowcount
+                else:
+                    stamped = 0
+    except psycopg2.Error:
+        logger.exception(
+            "Failed to assign digest_date=%s to %d articles",
+            digest_date,
+            len(article_ids),
+        )
+        raise
+
+    logger.info(
+        "Assigned digest_date=%s to %d articles",
+        digest_date,
+        stamped,
+    )
+    return stamped
+
+
+def clear_digest_dates(digest_date: date) -> int:
+    """Remove digest_date stamps for all articles on a calendar day.
+
+    Used by digest reset so a recompile starts without stale stamps.
+
+    Args:
+        digest_date: Local digest calendar date.
+
+    Returns:
+        Number of article rows cleared.
+
+    Raises:
+        psycopg2.Error: If the update fails.
+    """
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(_CLEAR_DIGEST_DATE, (digest_date,))
+                cleared = cur.rowcount
+    except psycopg2.Error:
+        logger.exception("Failed to clear digest_date=%s stamps", digest_date)
+        raise
+
+    logger.info("Cleared digest_date=%s from %d articles", digest_date, cleared)
+    return cleared

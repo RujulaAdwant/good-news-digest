@@ -1,4 +1,4 @@
-"""News ingestion from Event Registry (NewsAPI.ai) and RSS feeds."""
+"""News ingestion from TheNewsAPI and RSS feeds."""
 
 import logging
 from datetime import UTC, datetime, timedelta
@@ -15,7 +15,7 @@ from db.articles import ArticleRecord
 
 logger = logging.getLogger(__name__)
 
-EVENT_REGISTRY_URL = "https://eventregistry.org/api/v1/article/getArticles"
+THENNEWSAPI_URL = "https://api.thenewsapi.com/v1/news/all"
 
 RSS_FEEDS: dict[str, str] = {
     "AP News": "https://feeds.apnews.com/rss/topnews",
@@ -25,15 +25,15 @@ RSS_FEEDS: dict[str, str] = {
     "BBC": "http://feeds.bbci.co.uk/news/rss.xml",
 }
 
-# Event Registry category URIs — maps to "top headlines across categories".
-EVENT_REGISTRY_CATEGORIES: tuple[str, ...] = (
-    "news/Politics",
-    "news/Science",
-    "news/Health",
-    "news/Technology",
-    "dmoz/Business",
-    "news/Arts_and_Entertainment",
-    "news/Sports",
+# TheNewsAPI categories — mirrors the prior Event Registry topic coverage.
+THENNEWSAPI_CATEGORIES: tuple[str, ...] = (
+    "politics",
+    "science",
+    "health",
+    "tech",
+    "business",
+    "entertainment",
+    "sports",
 )
 
 
@@ -125,22 +125,25 @@ def _extract_rss_body(entry: feedparser.FeedParserDict) -> str | None:
     return None
 
 
-def _extract_event_registry_body(article: dict[str, Any]) -> str | None:
-    """Return the best available body/snippet from an Event Registry article."""
-    body = article.get("body")
-    if isinstance(body, str) and body.strip():
-        return body
+def _extract_thenewsapi_body(article: dict[str, Any]) -> str | None:
+    """Return the best available snippet from a TheNewsAPI article.
+
+    Prefer ``description`` (meta description) over ``snippet`` (often truncated
+    to ~60 characters).
+    """
+    for key in ("description", "snippet"):
+        value = article.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
     return None
 
 
-def _extract_event_registry_source(article: dict[str, Any]) -> str | None:
-    """Return the publisher name from an Event Registry article."""
+def _extract_thenewsapi_source(article: dict[str, Any], *, category: str) -> str:
+    """Return the publisher domain, or a category fallback."""
     source = article.get("source")
-    if isinstance(source, dict):
-        title = source.get("title")
-        if isinstance(title, str) and title.strip():
-            return title.strip()
-    return None
+    if isinstance(source, str) and source.strip():
+        return source.strip()
+    return f"TheNewsAPI:{category}"
 
 
 def fetch_cutoff(settings: Settings | None = None) -> datetime:
@@ -178,11 +181,11 @@ def within_fetch_window(
     return _to_utc(published_at) >= fetch_cutoff(settings)
 
 
-def _post_event_registry(payload: dict[str, Any]) -> dict[str, Any]:
-    """Send a POST request to the Event Registry API.
+def _get_thenewsapi(params: dict[str, Any]) -> dict[str, Any]:
+    """Send a GET request to TheNewsAPI all-news endpoint.
 
     Args:
-        payload: JSON body for the getArticles endpoint.
+        params: Query string parameters including ``api_token``.
 
     Returns:
         Parsed JSON response body.
@@ -190,86 +193,93 @@ def _post_event_registry(payload: dict[str, Any]) -> dict[str, Any]:
     Raises:
         httpx.HTTPError: If the HTTP request fails.
     """
-    response = httpx.post(EVENT_REGISTRY_URL, json=payload, timeout=30.0)
+    response = httpx.get(THENNEWSAPI_URL, params=params, timeout=30.0)
     response.raise_for_status()
     return response.json()
 
 
-def _parse_event_registry_article(
+def _parse_thenewsapi_article(
     item: dict[str, Any],
     *,
     category: str,
 ) -> ArticleRecord | None:
-    """Normalize a single Event Registry article into an ArticleRecord."""
+    """Normalize a single TheNewsAPI article into an ArticleRecord."""
     url = item.get("url")
     title = item.get("title")
-    if not url or not title:
+    if not isinstance(url, str) or not isinstance(title, str):
+        return None
+    if not url.strip() or not title.strip():
         return None
 
     return ArticleRecord(
         title=title.strip(),
         url=url.strip(),
-        source=_extract_event_registry_source(item) or f"EventRegistry:{category}",
-        published_at=_parse_iso_datetime(item.get("dateTimePub") or item.get("dateTime")),
-        full_text=_extract_event_registry_body(item),
+        source=_extract_thenewsapi_source(item, category=category),
+        published_at=_parse_iso_datetime(item.get("published_at")),
+        full_text=_extract_thenewsapi_body(item),
     )
 
 
-def fetch_from_event_registry(settings: Settings | None = None) -> list[ArticleRecord]:
-    """Fetch recent headlines across Event Registry categories.
+def fetch_from_thenewsapi(settings: Settings | None = None) -> list[ArticleRecord]:
+    """Fetch recent headlines across TheNewsAPI categories.
 
-    Uses the NewsAPI.ai / Event Registry API (not newsapi.org). The API key
-    is read from ``NEWSAPI_KEY`` in ``.env``.
+    Uses https://www.thenewsapi.com (``THENEWSAPI_KEY`` / ``api_token``).
+    One request per category so a low plan ``limit`` still covers topics.
 
     Args:
         settings: Optional settings override for testing.
 
     Returns:
-        Parsed article records from Event Registry responses.
+        Parsed article records from TheNewsAPI responses.
     """
     cfg = settings or get_settings()
-    if not cfg.newsapi_key:
-        logger.warning("NEWSAPI_KEY is not set; skipping Event Registry fetch")
+    if not cfg.thenewsapi_key:
+        logger.warning("THENEWSAPI_KEY is not set; skipping TheNewsAPI fetch")
         return []
 
-    date_start = fetch_cutoff(cfg).strftime("%Y-%m-%d")
+    published_after = fetch_cutoff(cfg).strftime("%Y-%m-%dT%H:%M:%S")
     articles: list[ArticleRecord] = []
     seen_urls: set[str] = set()
 
-    for category in EVENT_REGISTRY_CATEGORIES:
-        payload = {
-            "apiKey": cfg.newsapi_key,
-            "lang": "eng",
-            "categoryUri": category,
-            "dateStart": date_start,
-            "articlesPage": 1,
-            "articlesCount": 100,
-            "resultType": "articles",
-            "sortBy": "date",
+    for category in THENNEWSAPI_CATEGORIES:
+        params = {
+            "api_token": cfg.thenewsapi_key,
+            "categories": category,
+            "language": "en",
+            "published_after": published_after,
+            "sort": "published_at",
+            "limit": 50,
+            "page": 1,
         }
         try:
-            response = _post_event_registry(payload)
+            response = _get_thenewsapi(params)
         except httpx.HTTPError:
-            logger.exception("Event Registry fetch failed for category=%s", category)
+            logger.exception("TheNewsAPI fetch failed for category=%s", category)
             continue
 
-        if response.get("error"):
+        if not isinstance(response, dict):
+            logger.error("TheNewsAPI unexpected response type for category=%s", category)
+            continue
+
+        results = response.get("data")
+        if not isinstance(results, list):
             logger.error(
-                "Event Registry API error for category=%s: %s",
+                "TheNewsAPI missing data list for category=%s response_keys=%s",
                 category,
-                response["error"],
+                list(response.keys()),
             )
             continue
 
-        results = response.get("articles", {}).get("results", [])
         for item in results:
-            record = _parse_event_registry_article(item, category=category)
+            if not isinstance(item, dict):
+                continue
+            record = _parse_thenewsapi_article(item, category=category)
             if not record or record.url in seen_urls:
                 continue
             articles.append(record)
             seen_urls.add(record.url)
 
-    logger.info("Fetched %d articles from Event Registry", len(articles))
+    logger.info("Fetched %d articles from TheNewsAPI", len(articles))
     return articles
 
 
@@ -328,8 +338,12 @@ def fetch_articles(settings: Settings | None = None) -> list[ArticleRecord]:
         Article records published within the configured fetch window.
     """
     cfg = settings or get_settings()
-    combined = fetch_from_event_registry(cfg) + fetch_from_rss()
-    filtered = [article for article in combined if within_fetch_window(article.published_at, settings=cfg)]
+    combined = fetch_from_thenewsapi(cfg) + fetch_from_rss()
+    filtered = [
+        article
+        for article in combined
+        if within_fetch_window(article.published_at, settings=cfg)
+    ]
     dropped = len(combined) - len(filtered)
     if dropped:
         logger.info("Dropped %d articles outside the fetch window", dropped)

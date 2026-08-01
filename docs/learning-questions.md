@@ -18,7 +18,7 @@ Add new sections here when later phases ship.
 ### `app/config.py`
 
 6. Why put secrets in environment variables instead of constants in code?
-7. Why is `database_url` required but `newsapi_key` allowed to be empty?
+7. Why is `database_url` required but `thenewsapi_key` allowed to be empty?
 8. What does `@lru_cache` on `get_settings` do, and when would you clear it?
 9. Why is `Settings` a `frozen=True` dataclass?
 10. How would you add a new tunable config value without breaking existing deploys?
@@ -44,7 +44,7 @@ Add new sections here when later phases ship.
 ### `app/fetcher.py`
 
 23. End-to-end: what does `fetch_articles()` return, and what does it *not* do?
-24. Why use Event Registry (HTTP JSON API) in addition to RSS?
+24. Why use TheNewsAPI (HTTP JSON API) in addition to RSS?
 25. Why continue on a single category/feed failure instead of failing the whole fetch?
 26. What is RSS/Atom, and what does feedparser normalize for you?
 27. Why prefer `published_parsed` over raw `published` date strings?
@@ -53,7 +53,7 @@ Add new sections here when later phases ship.
 30. Why compute the fetch cutoff in `America/Los_Angeles` then convert to UTC?
 31. What does the in-memory `seen_urls` set catch that DB `UNIQUE` does not (and vice versa)?
 32. Why does `text_for_nlp` exist before sentiment/embeddings were implemented?
-33. Event Registry already gets `dateStart` — why still filter with `within_fetch_window`?
+33. TheNewsAPI already gets `published_after` — why still filter with `within_fetch_window`?
 
 ### `app/schemas.py`
 
@@ -82,9 +82,9 @@ Add new sections here when later phases ship.
 
 ### Phase 1 — Cross-cutting
 
-50. Trace one article from Event Registry JSON → `ArticleRecord` → `INSERT` → `GET /articles` JSON.
+50. Trace one article from TheNewsAPI JSON → `ArticleRecord` → `INSERT` → `GET /articles` JSON.
 51. Name three different “dedup / filter” layers in Phase 1 and what each misses.
-52. If Event Registry is down but RSS works, what does `POST /fetch` return?
+52. If TheNewsAPI is down but RSS works, what does `POST /fetch` return?
 53. Where would embedding-based dedup live without breaking Phase 1 layout?
 54. Why is FastAPI a better fit than Flask for this project’s API layer?
 
@@ -113,30 +113,42 @@ Add new sections here when later phases ship.
 68. Why is the sentiment threshold (0.6) tunable via env?
 69. Why score only non-duplicates with `sentiment_score IS NULL`?
 
+### Digest selection (`app/digest.py`)
+
+70. Why select final digest picks *before* calling Claude, instead of summarizing every positive article?
+71. Walk through greedy topic diversity: sort order, keep/skip rule, and when selection stops.
+72. Why is `TOPIC_DIVERSITY_THRESHOLD` (default 0.70) lower than `SIMILARITY_THRESHOLD` (0.85)?
+73. Why is `DIGEST_SIZE` (default 5) an env knob rather than a hardcoded constant?
+74. What if fewer than `DIGEST_SIZE` candidates survive the diversity filter?
+75. Why live in `digest.py` instead of inside `summarizer.py`?
+
 ### Summarization (`app/summarizer.py`)
 
-70. Why run sentiment filtering *before* calling Claude?
-71. Why cache `summary` in Postgres and skip rows that already have one?
-72. What does `max_tokens=150` control, and why does it matter for cost?
-73. Why retry Claude calls (max 2 retries) instead of failing immediately?
-74. What happens if `ANTHROPIC_API_KEY` is missing?
+76. After digest selection, which of those picks does Claude actually get called for?
+77. Why cache `summary` in Postgres and never re-summarize the same article?
+78. What does `max_tokens=150` control, and why does it matter for cost?
+79. Why retry Claude calls (max 2 retries) instead of failing immediately?
+80. What happens if `ANTHROPIC_API_KEY` is missing?
+81. If digest selection fails, how does that show up in the summarize stage?
 
 ### Orchestration (`POST /process`)
 
-75. Walk through what `POST /process` does, stage by stage.
-76. If deduplication throws, do sentiment and summarization still run? Why design it that way?
-77. Why a separate `/process` endpoint instead of folding NLP into `/fetch`?
-78. Which articles are eligible for summarization (list the predicates)?
+82. Walk through what `POST /process` does, stage by stage.
+83. If deduplication throws, do sentiment and summarization still run? Why design it that way?
+84. Why a separate `/process` endpoint instead of folding NLP into `/fetch`?
+85. Which articles get a Claude summary (list every gate, including digest selection)?
 
 ### Phase 2 — Cross-cutting / interview favorites
 
-79. Explain the full pipeline order and why each stage comes before the next.
-80. How would you tune similarity and sentiment thresholds in production?
-81. What’s the difference between storage-layer dedup (URL) and NLP dedup (embeddings)?
-82. How do you test NLP stages without downloading models or calling Claude in CI?
+86. Explain the full pipeline order and why each stage comes before the next.
+87. How would you tune similarity, sentiment, digest size, and topic diversity in production?
+88. Storage-layer dedup (URL) vs NLP dedup (embeddings) vs digest topic diversity — what’s each for?
+89. How do you test NLP / digest stages without downloading models or calling Claude in CI?
 
 ---
 
 ## Not yet implemented (placeholder)
 
-Questions for Phase 3 (digest + email + scheduler) and Phase 4 (deploy + polish) will be added when those phases land.
+Digest *selection* shipped early with Phase 2 summarization. Remaining Phase 3 work
+(digest row / HTML email / SendGrid / APScheduler) and Phase 4 (deploy + polish) get
+questions when those land.

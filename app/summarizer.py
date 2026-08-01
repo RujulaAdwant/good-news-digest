@@ -1,22 +1,29 @@
 """Claude-based article summarization.
 
-Only articles that are non-duplicates and above the sentiment threshold are
-summarized — summarizing discarded stories wastes API cost.
+Only the final digest picks are summarized — summarizing the full positive
+pool wastes API cost and latency. Selection lives in ``app.digest``; this
+module only calls Claude for those picks that still have ``summary IS NULL``.
 
 Model: ``claude-sonnet-4-6``, max_tokens=150.
 Summaries are cached in ``articles.summary`` and never recomputed.
+
+Claude sometimes returns a meta-refusal ("I'm sorry, but…") on thin/caption
+content. Those are not summaries — we reject them and leave ``summary`` null
+so digests never show the refusal text.
 """
 
 from __future__ import annotations
 
 import logging
+import re
 import time
 
 import anthropic
 
 from app.config import Settings, get_settings
-from app.exceptions import SummarizationError
-from app.fetcher import fetch_cutoff, text_for_nlp
+from app.digest import select_articles_for_digest
+from app.exceptions import DigestSelectionError, SummarizationError
+from app.fetcher import text_for_nlp
 from db import articles as articles_db
 from db.articles import ArticleRecord
 
@@ -26,11 +33,55 @@ CLAUDE_MODEL = "claude-sonnet-4-6"
 MAX_TOKENS = 150
 MAX_RETRIES = 2
 RETRY_BACKOFF_SECONDS = 1.0
+# Skip the API call when title+snippet is too thin to produce a real summary.
+MIN_SUMMARY_CHARS = 80
+INSUFFICIENT_CONTENT_TOKEN = "INSUFFICIENT_CONTENT"
 
 SUMMARY_PROMPT = (
     "Summarize this news article in 2-3 sentences, focusing on what's "
-    "hopeful or constructive. Do not add facts that are not in the text."
+    "hopeful or constructive. Do not add facts that are not in the text. "
+    "If the text is too thin, is only a caption/headline with no article body, "
+    f"or otherwise cannot support a real news summary, reply with exactly "
+    f"{INSUFFICIENT_CONTENT_TOKEN} and nothing else. "
+    "Never apologize, never explain why you cannot summarize, and never "
+    "describe what the text is about when refusing."
 )
+
+# Phrases Claude (and similar models) use when declining to summarize.
+_REFUSAL_PATTERNS = (
+    re.compile(r"\binsufficient_content\b", re.IGNORECASE),
+    re.compile(r"\bi'?m sorry\b", re.IGNORECASE),
+    re.compile(r"\bi am sorry\b", re.IGNORECASE),
+    re.compile(r"\bunable to summarize\b", re.IGNORECASE),
+    re.compile(r"\bnot enough (substantive |meaningful )?content\b", re.IGNORECASE),
+    re.compile(r"\bdoesn'?t contain enough\b", re.IGNORECASE),
+    re.compile(r"\bdoes not contain enough\b", re.IGNORECASE),
+    re.compile(
+        r"\bcannot (construct|provide|create) (a |an )?(summary|2-3)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(r"\bi can'?t summarize\b", re.IGNORECASE),
+    re.compile(r"\bno actual article content\b", re.IGNORECASE),
+)
+
+
+def is_usable_summary(summary: str | None) -> bool:
+    """Return whether ``summary`` is a real digest blurb (not empty/refusal).
+
+    Args:
+        summary: Cached Claude output, if any.
+
+    Returns:
+        True only for non-empty text that does not look like a model refusal.
+    """
+    if summary is None:
+        return False
+    text = summary.strip()
+    if not text:
+        return False
+    if text.upper() == INSUFFICIENT_CONTENT_TOKEN:
+        return False
+    return not any(pattern.search(text) for pattern in _REFUSAL_PATTERNS)
 
 
 def _build_user_message(article: ArticleRecord) -> str:
@@ -44,6 +95,11 @@ def _build_user_message(article: ArticleRecord) -> str:
     """
     body = text_for_nlp(article.title, article.full_text)
     return f"Title: {article.title}\n\nArticle:\n{body}"
+
+
+def _article_text_for_length_check(article: ArticleRecord) -> str:
+    """Return the same text window used for summarization length gating."""
+    return text_for_nlp(article.title, article.full_text).strip()
 
 
 def summarize_with_claude(
@@ -61,7 +117,8 @@ def summarize_with_claude(
         Summary text from Claude.
 
     Raises:
-        SummarizationError: If all attempts fail.
+        SummarizationError: If all attempts fail, or Claude refuses / returns
+            insufficient-content (caller must not persist those).
     """
     client = anthropic.Anthropic(api_key=api_key)
     user_content = _build_user_message(article)
@@ -88,6 +145,11 @@ def summarize_with_claude(
             summary = "\n".join(text_blocks).strip()
             if not summary:
                 raise SummarizationError("Claude returned an empty summary")
+            if not is_usable_summary(summary):
+                # Do not retry refusals — thin content will refuse again.
+                raise SummarizationError(
+                    f"Claude returned a non-summary refusal for url={article.url}"
+                )
             return summary
         except SummarizationError:
             raise
@@ -108,11 +170,19 @@ def summarize_with_claude(
     ) from last_error
 
 
-def summarize_articles(settings: Settings | None = None) -> int:
-    """Summarize eligible articles and cache results in PostgreSQL.
+# Over-select relative to DIGEST_SIZE so Claude refusals / thin articles
+# still leave summaries available for as many final digest picks as possible.
+SUMMARY_CANDIDATE_MULTIPLIER = 2
 
-    Eligibility: in fetch window, not duplicate, sentiment >= threshold,
-    summary IS NULL.
+
+def summarize_articles(settings: Settings | None = None) -> int:
+    """Summarize final digest picks and cache results in PostgreSQL.
+
+    Eligibility: selected by ``select_articles_for_digest`` (top sentiment,
+    topic-diverse) and still missing a *usable* summary. We over-select
+    (``digest_size * 2``) so more of the eventual digest picks get blurbs
+    even when some Claude calls refuse. Cached refusal text is cleared so
+    digests never surface it.
 
     Args:
         settings: Optional settings override for testing.
@@ -121,38 +191,83 @@ def summarize_articles(settings: Settings | None = None) -> int:
         Number of summaries written.
 
     Raises:
-        SummarizationError: If candidate load or bulk persist fails.
+        SummarizationError: If selection or bulk persist fails.
     """
     cfg = settings or get_settings()
     if not cfg.anthropic_api_key:
         logger.warning("ANTHROPIC_API_KEY is not set; skipping summarization")
         return 0
 
-    cutoff = fetch_cutoff(cfg)
-
     try:
-        candidates = articles_db.get_articles_needing_summary(
-            cutoff,
-            cfg.sentiment_threshold,
+        selected = select_articles_for_digest(
+            cfg,
+            digest_size=cfg.digest_size * SUMMARY_CANDIDATE_MULTIPLIER,
         )
-    except Exception as exc:
-        raise SummarizationError("Failed to load articles for summarization") from exc
+    except DigestSelectionError as exc:
+        raise SummarizationError("Digest selection failed") from exc
 
-    if not candidates:
-        logger.info("No articles need summarization")
-        return 0
+    # Drop previously cached refusal prose so it cannot leak into /digest.
+    stale_refusal_ids = [
+        article.id
+        for article in selected
+        if article.id is not None
+        and article.summary
+        and not is_usable_summary(article.summary)
+    ]
+    if stale_refusal_ids:
+        try:
+            cleared = articles_db.clear_summaries(stale_refusal_ids)
+            logger.info(
+                "Cleared %d unusable cached summaries from digest picks",
+                cleared,
+            )
+        except Exception as exc:
+            raise SummarizationError(
+                "Failed to clear unusable cached summaries"
+            ) from exc
 
-    written: list[tuple[int, str]] = []
-    for article in candidates:
+    needing_summary: list[ArticleRecord] = []
+    for article in selected:
         if article.id is None:
             continue
+        if is_usable_summary(article.summary):
+            continue
+        body = _article_text_for_length_check(article)
+        if len(body) < MIN_SUMMARY_CHARS:
+            logger.info(
+                "Skipping thin article for Claude url=%s chars=%d min=%d",
+                article.url,
+                len(body),
+                MIN_SUMMARY_CHARS,
+            )
+            continue
+        needing_summary.append(article)
+
+    if not needing_summary:
+        logger.info(
+            "No digest picks need summarization (selected=%d)",
+            len(selected),
+        )
+        return 0
+
+    logger.info(
+        "Summarizing %d digest picks (selected=%d summarize_cap=%d digest_size=%d)",
+        len(needing_summary),
+        len(selected),
+        cfg.digest_size * SUMMARY_CANDIDATE_MULTIPLIER,
+        cfg.digest_size,
+    )
+
+    written: list[tuple[int, str]] = []
+    for article in needing_summary:
+        assert article.id is not None  # filtered above
         try:
             summary = summarize_with_claude(article, api_key=cfg.anthropic_api_key)
             written.append((article.id, summary))
             logger.info("Summarized url=%s", article.url)
         except SummarizationError:
-            logger.exception(
-                "Summarization failed for url=%s stage=summarize",
+            logger.warning(
+                "Summarization skipped (no usable summary) url=%s stage=summarize",
                 article.url,
             )
 

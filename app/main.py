@@ -5,13 +5,26 @@ from typing import Annotated
 
 from fastapi import FastAPI, HTTPException, Query
 
-from app import deduplicator, fetcher, sentiment, summarizer
+from app import deduplicator, digest, emailer, fetcher, sentiment, summarizer
+from app.config import get_settings
 from app.exceptions import (
+    DigestCompileError,
+    DigestResetError,
     DuplicateDetectionError,
+    EmailDeliveryError,
     SentimentScoringError,
     SummarizationError,
 )
-from app.schemas import ArticleResponse, FetchResponse, ProcessResponse
+from app.schemas import (
+    ArticleResponse,
+    DigestArticleSummary,
+    DigestResetResponse,
+    DigestResponse,
+    FetchResponse,
+    ProcessResponse,
+    SendResponse,
+)
+from app.summarizer import is_usable_summary
 from db import articles as articles_db
 
 logging.basicConfig(
@@ -25,6 +38,12 @@ app = FastAPI(
     description="Backend service for fetching, filtering, and delivering positive news.",
     version="0.1.0",
 )
+
+
+@app.get("/health")
+def health() -> dict[str, str]:
+    """Liveness probe for local runs and Railway health checks."""
+    return {"status": "ok"}
 
 
 @app.post("/fetch", response_model=FetchResponse, status_code=201)
@@ -46,7 +65,10 @@ def trigger_fetch() -> FetchResponse:
 
 @app.post("/process", response_model=ProcessResponse)
 def trigger_process() -> ProcessResponse:
-    """Run deduplication → sentiment → summarization on windowed articles.
+    """Run deduplication → sentiment → digest-pick summarization.
+
+    Summarization only covers the final digest selection (top sentiment,
+    topic-diverse), not every positive article.
 
     Each stage is isolated: a failure in one is recorded in ``stage_errors``
     and later stages still run.
@@ -79,6 +101,108 @@ def trigger_process() -> ProcessResponse:
         sentiment_scored=sentiment_scored,
         summarized=summarized,
         stage_errors=stage_errors,
+    )
+
+
+@app.post("/digest", response_model=DigestResponse, status_code=201)
+def trigger_digest() -> DigestResponse:
+    """Compile today's digest without sending email.
+
+    Selects topic-diverse positive stories, upserts the ``digests`` row,
+    and stamps ``articles.digest_date``. Usable Claude summaries are
+    included in the preview when present; missing ones are ``null``.
+    Prefer ``POST /process`` (summarize) before this, then ``POST /send``
+    after inspecting.
+    """
+    try:
+        compiled = digest.compile_digest()
+    except DigestCompileError as exc:
+        logger.exception("Digest compile failed")
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("Digest compile failed unexpectedly")
+        raise HTTPException(status_code=500, detail="Digest compile failed") from exc
+
+    return DigestResponse(
+        digest_id=compiled.digest_id,
+        digest_date=compiled.digest_date,
+        article_count=len(compiled.articles),
+        article_ids=[a.id for a in compiled.articles if a.id is not None],
+        articles=[
+            DigestArticleSummary(
+                id=article.id,  # type: ignore[arg-type]
+                title=article.title,
+                url=article.url,
+                source=article.source,
+                sentiment_score=article.sentiment_score,
+                summary=article.summary if is_usable_summary(article.summary) else None,
+            )
+            for article in compiled.articles
+            if article.id is not None
+        ],
+    )
+
+
+@app.delete("/digest", response_model=DigestResetResponse)
+def reset_digest() -> DigestResetResponse:
+    """Unlock today's digest for recompile and resend (dev/test only).
+
+    Clears ``email_sent_at`` and article ``digest_date`` stamps for the
+    local calendar day. Requires ``ALLOW_DIGEST_RESET=true``. After reset,
+    call ``POST /digest`` then ``POST /send`` again.
+    """
+    try:
+        result = digest.reset_digest()
+    except DigestResetError as exc:
+        logger.exception("Digest reset failed")
+        detail = str(exc)
+        if "disabled" in detail:
+            status = 403
+        elif "No digest found" in detail:
+            status = 404
+        else:
+            status = 400
+        raise HTTPException(status_code=status, detail=detail) from exc
+    except Exception as exc:
+        logger.exception("Digest reset failed unexpectedly")
+        raise HTTPException(status_code=500, detail="Digest reset failed") from exc
+
+    return DigestResetResponse(
+        digest_id=result.digest_id,
+        digest_date=result.digest_date,
+        email_was_sent=result.email_was_sent,
+        articles_unstamped=result.articles_unstamped,
+        message="Digest unlocked for recompile and resend",
+    )
+
+
+@app.post("/send", response_model=SendResponse)
+def trigger_send() -> SendResponse:
+    """Email the compiled digest for today via SendGrid.
+
+    Requires a prior ``POST /digest`` for today's local calendar date.
+    """
+    settings = get_settings()
+    try:
+        sent = emailer.send_digest(settings)
+    except EmailDeliveryError as exc:
+        logger.exception("Digest send failed")
+        detail = str(exc)
+        status = 404 if "No compiled digest" in detail else 400
+        if "already sent" in detail:
+            status = 409
+        raise HTTPException(status_code=status, detail=detail) from exc
+    except Exception as exc:
+        logger.exception("Digest send failed unexpectedly")
+        raise HTTPException(status_code=500, detail="Digest send failed") from exc
+
+    assert sent.email_sent_at is not None
+    return SendResponse(
+        digest_id=sent.id,
+        digest_date=sent.date,
+        article_count=len(sent.article_ids),
+        email_sent_at=sent.email_sent_at,
+        recipient=settings.digest_recipient_email,
     )
 
 

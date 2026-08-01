@@ -12,7 +12,7 @@ File-by-file walkthrough of code and design decisions
 - digests.date is unique because there is at most one digest per calendar day
 
 ### app/config.py
-- newsapi_key is not required because RSS can be used to fetch
+- thenewsapi_key is not required because RSS can be used to fetch
 - RSS is Really Simple Syndication, standardized web feed format that auto-delivers updates from websites, blogs, and news sources
 - @lrucache caches the first Settings so that env doesn't need to be re-read ina ny call; resets for testing and env changes
 

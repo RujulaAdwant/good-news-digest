@@ -5,6 +5,7 @@ Tracked issues found during development. Updated as we go.
 | Date | Bug | Root Cause | Fix | Status |
 |------|-----|------------|-----|--------|
 | 2026-07-12 | NewsAPI returns `apiKeyInvalid` on live fetch | Code targeted **newsapi.org** but key is from **newsapi.ai** (Event Registry) — different APIs | Migrated fetcher to `eventregistry.org/api/v1/article/getArticles` | fixed |
+| 2026-07-31 | Migrated off Event Registry | Prefer thenewsapi.com; env key already present | Replaced Event Registry client with TheNewsAPI (`/v1/news/all`, `THENEWSAPI_KEY`) | fixed |
 | 2026-07-12 | AP News + Reuters RSS return DNS errors in smoke test | Feed host lookup failed (`nodename nor servname provided`) — may be transient network issue or deprecated feed URLs | Re-test after network stable; swap feeds if still failing | open |
 
 ## Notes

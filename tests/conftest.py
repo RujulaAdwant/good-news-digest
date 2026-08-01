@@ -13,16 +13,22 @@ def test_settings() -> Settings:
     """Settings with a fixed timezone and fetch window for deterministic tests."""
     return Settings(
         database_url="postgresql://digest:digest@localhost:5432/good_news_digest",
-        newsapi_key="test-newsapi-key",
+        thenewsapi_key="test-thenewsapi-key",
         anthropic_api_key="",
         sendgrid_api_key="",
         sendgrid_from_email="",
         digest_recipient_email="",
         similarity_threshold=0.85,
         sentiment_threshold=0.6,
+        sentiment_target=None,
+        digest_size=5,
+        topic_diversity_threshold=0.70,
+        relevance_margin=0.05,
         digest_hour=7,
         digest_timezone="America/Los_Angeles",
         fetch_window_hours=24,
+        allow_digest_reset=False,
+        digest_banner_url="",
     )
 
 

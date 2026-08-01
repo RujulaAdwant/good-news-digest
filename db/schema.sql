@@ -1,4 +1,4 @@
-CREATE TABLE articles (
+CREATE TABLE IF NOT EXISTS articles (
     id SERIAL PRIMARY KEY,
     title TEXT NOT NULL,
     url TEXT UNIQUE NOT NULL,
@@ -12,7 +12,7 @@ CREATE TABLE articles (
     created_at TIMESTAMP DEFAULT NOW()
 );
 
-CREATE TABLE digests (
+CREATE TABLE IF NOT EXISTS digests (
     id SERIAL PRIMARY KEY,
     date DATE UNIQUE NOT NULL,
     article_ids INTEGER[],

@@ -10,4 +10,3 @@ sendgrid
 apscheduler
 python-dotenv
 pytest
-httpx

@@ -115,7 +115,7 @@ Fetch → Store → Deduplicate → Score Sentiment → Summarize → Compile �
 - Always suggest a unit test after writing a function
 - Tests go in `tests/` mirroring the `app/` structure
 - Use `pytest`
-- Mock all external API calls (NewsAPI, Claude, SendGrid) in tests — never
+- Mock all external API calls (TheNewsAPI, Claude, SendGrid) in tests — never
   hit real APIs in test suite
 - For NLP functions, suggest at least one test with a known duplicate pair
   and one with clearly distinct articles
@@ -138,11 +138,16 @@ Fetch → Store → Deduplicate → Score Sentiment → Summarize → Compile �
 ## Environment Variables Expected
 
 ANTHROPIC_API_KEY=
-NEWSAPI_KEY=
+THENEWSAPI_KEY=
 SENDGRID_API_KEY=
 SENDGRID_FROM_EMAIL=
 DATABASE_URL=
 DIGEST_RECIPIENT_EMAIL=
 SIMILARITY_THRESHOLD=0.85
 SENTIMENT_THRESHOLD=0.6
+SENTIMENT_TARGET=
+DIGEST_SIZE=5
+TOPIC_DIVERSITY_THRESHOLD=0.70
 DIGEST_HOUR=7
+ALLOW_DIGEST_RESET=false
+DIGEST_BANNER_URL=

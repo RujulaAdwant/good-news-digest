@@ -1,0 +1,10 @@
+# Railway service defaults for the API. Create a second service from the same
+# repo with start command ``python scheduler.py`` for the daily worker.
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+healthcheckPath = "/health"
+healthcheckTimeout = 30
+restartPolicyType = "ON_FAILURE"

@@ -23,7 +23,7 @@ Aim to explain each in ~1–2 minutes without notes. Wording can differ; the ide
 
 6. **Env vars for secrets.** Don’t commit keys. Same code runs locally and in deploy with different env.
 
-7. **Required DB, optional news key.** No database → nothing works. Empty news API key → skip Event Registry; RSS-only fetch still works.
+7. **Required DB, optional news key.** No database → nothing works. Empty TheNewsAPI key → skip TheNewsAPI; RSS-only fetch still works.
 
 8. **`@lru_cache`.** Caches the first `Settings` so env isn’t re-parsed every call. Clear with `get_settings.cache_clear()` after env changes or between tests.
 
@@ -63,7 +63,7 @@ Aim to explain each in ~1–2 minutes without notes. Wording can differ; the ide
 
 23. **`fetch_articles` returns / doesn’t.** Returns filtered `list[ArticleRecord]`. Does **not** write to Postgres — `save_articles` / `main` does that.
 
-24. **Event Registry + RSS.** Broader category coverage and structured JSON. RSS is simple/free but feed-limited. Together: coverage + resilience if one path fails.
+24. **TheNewsAPI + RSS.** Broader category coverage and structured JSON. RSS is simple/free but feed-limited. Together: coverage + resilience if one path fails.
 
 25. **Continue on partial failure.** Partial success > total failure. One bad feed shouldn’t block the whole ingest.
 
@@ -81,7 +81,7 @@ Aim to explain each in ~1–2 minutes without notes. Wording can differ; the ide
 
 32. **`text_for_nlp` early.** Shared title+first-paragraph shape for later embeddings/sentiment — one helper, no rework in Phase 2.
 
-33. **`dateStart` + client window.** API filter is coarse (calendar day). Client filter is the exact hour window in digest TZ and also gates RSS (no `dateStart`).
+33. **`published_after` + client window.** API filter is coarse (server-side datetime). Client filter is the exact hour window in digest TZ and also gates RSS (no API date param).
 
 ### `app/schemas.py`
 
@@ -123,7 +123,7 @@ Aim to explain each in ~1–2 minutes without notes. Wording can differ; the ide
 
 ### Phase 1 — Cross-cutting
 
-50. **Trace.** Event Registry JSON → parse to `ArticleRecord` → optional window keep → `save_articles` INSERT → `GET /articles` → `ArticleResponse` JSON.
+50. **Trace.** TheNewsAPI JSON → parse to `ArticleRecord` → optional window keep → `save_articles` INSERT → `GET /articles` → `ArticleResponse` JSON.
 
 51. **Three layers.** (1) In-batch `seen_urls` — misses cross-run / different URLs. (2) `UNIQUE url` + ON CONFLICT — misses same story, different URLs. (3) Fetch window — not dedup; drops old/undated. Phase 2 embeddings cover semantic duplicates.
 
@@ -171,40 +171,56 @@ Aim to explain each in ~1–2 minutes without notes. Wording can differ; the ide
 
 69. **Skip dupes / already scored.** Don’t waste compute on discarded copies; don’t overwrite existing scores on re-run (`IS NULL` = idempotent).
 
+### Digest selection
+
+70. **Select before Claude.** Summaries cost money and latency. Only the ~5 stories that will ship in the email should hit the API — not every article above the sentiment threshold.
+
+71. **Greedy diversity.** Candidates come ordered by `sentiment_score` DESC. Keep the first; for each later story, compute max cosine similarity to already-kept embeddings; skip if ≥ `topic_diversity_threshold`; stop at `digest_size`.
+
+72. **0.70 vs 0.85.** Dedup (0.85) catches near-copies of the *same* story. Diversity (0.70) is looser so two different climate wins still count as the same *topic* and only one makes the digest. Starting point — tune on real digests.
+
+73. **`DIGEST_SIZE` env.** Product preference (4 vs 8 stories) shouldn’t require a code change; different deploys can try different caps.
+
+74. **Fewer than N.** Return whatever passed — better a short diverse digest than padding with overlapping topics.
+
+75. **Own module.** Selection is digest concern (what ships); summarizer only turns picks into text. Phase 3 email/compile reuses the same picker without pulling Claude into that path.
+
 ### Summarization
 
-70. **Filter before Claude.** API calls cost money and latency. Only summarize stories that will appear in the digest.
+76. **Claude gate.** Among selected digest picks, only those with `summary IS NULL` (and a non-null `id`) get an API call. Already-cached picks are skipped.
 
-71. **Cache summary.** Idempotent `/process`; never re-pay for the same article. `summary IS NULL` is the gate.
+77. **Cache summary.** Idempotent `/process`; never re-pay for the same article.
 
-72. **`max_tokens`.** Caps generated output length (and thus cost). 150 is enough for 2–3 sentences.
+78. **`max_tokens`.** Caps generated output length (and thus cost). 150 is enough for 2–3 sentences.
 
-73. **Retries.** Transient network/API errors are common; 2 retries with backoff recover without failing the whole stage for one blip.
+79. **Retries.** Transient network/API errors are common; 2 retries with backoff recover without failing the whole stage for one blip. (Billing/credit 400s are *not* transient — retries just spam logs.)
 
-74. **Missing key.** Log warning, skip summarization, return 0 — same pattern as optional news API key.
+80. **Missing key.** Log warning, skip summarization, return 0 — same pattern as optional news API key.
+
+81. **Selection failure.** `DigestSelectionError` is wrapped as `SummarizationError`; `/process` records `"summarize"` in `stage_errors`.
 
 ### Orchestration
 
-75. **`/process`.** Dedup windowed articles → score unscored non-dupes → summarize eligible positive non-dupes without summaries → return counts + any `stage_errors`.
+82. **`/process`.** Dedup windowed articles → score unscored non-dupes → select top diverse digest picks → Claude only those still missing summaries → return counts + any `stage_errors`.
 
-76. **Continue after failure.** One stage failing shouldn’t kill the pipeline (cursorrules). Record error in `stage_errors`; later stages still run on whatever data is ready.
+83. **Continue after failure.** One stage failing shouldn’t kill the pipeline (cursorrules). Record error in `stage_errors`; later stages still run on whatever data is ready.
 
-77. **Separate `/process`.** Fetch and NLP are different concerns; easier to debug/re-run NLP without re-hitting external news APIs. Scheduler can call both in order later.
+84. **Separate `/process`.** Fetch and NLP are different concerns; easier to debug/re-run NLP without re-hitting external news APIs. Scheduler can call both in order later.
 
-78. **Summary eligibility.** In fetch window AND `is_duplicate = FALSE` AND `sentiment_score >= threshold` AND `summary IS NULL`.
+85. **Summary eligibility.** In fetch window → `is_duplicate = FALSE` → `sentiment_score >= threshold` → selected by greedy topic diversity into top `DIGEST_SIZE` → `summary IS NULL`.
 
 ### Phase 2 — Cross-cutting
 
-79. **Order.** Fetch → Store (cheap URL dedup) → semantic dedup → sentiment → summarize → (later) compile/email. Each stage narrows the set before more expensive work.
+86. **Order.** Fetch → Store (cheap URL dedup) → semantic dedup → sentiment → **digest select** → summarize picks → (later) compile/email. Each stage narrows the set before more expensive work.
 
-80. **Tuning.** Run for days; spot-check false dupes / missed dupes / “positive” stories that aren’t; adjust `SIMILARITY_THRESHOLD` and `SENTIMENT_THRESHOLD` in env; re-run `/process` on pending rows as needed.
+87. **Tuning.** Spot-check false/missed dupes, “positive” misses, digests that feel repetitive or too short; adjust `SIMILARITY_THRESHOLD`, `SENTIMENT_THRESHOLD`, `DIGEST_SIZE`, `TOPIC_DIVERSITY_THRESHOLD`; re-run `/process` as needed.
 
-81. **Storage vs NLP dedup.** URL: exact same link. Embeddings: same meaning, different links/wording.
+88. **Three similarity uses.** URL: exact same link. NLP dedup: same story, different wording/links → discard copy. Topic diversity: different stories, same theme → keep only one for the email.
 
-82. **Testing NLP.** Unit-test pure helpers (`positive_probability`, `find_duplicate_ids` with mocked embeddings). Mock HuggingFace pipeline and Anthropic client. Never hit real Claude/News APIs in CI.
+89. **Testing NLP.** Unit-test pure helpers (`positive_probability`, `find_duplicate_ids` / `pick_diverse_articles` with mocked embeddings). Mock HuggingFace pipeline and Anthropic client. Never hit real Claude/News APIs in CI.
 
 ---
 
 ## Not yet implemented
 
-Phase 3–4 answers will be added when digest, email, scheduler, and deploy land.
+Digest selection answers are above. Remaining Phase 3–4 (digest row, email, scheduler, deploy) answers land with those features.

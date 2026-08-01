@@ -3,7 +3,7 @@
 A daily email digest that cuts through sensational news cycles to surface constructive, solutions-oriented stories.
 
 ## The Why
-What's the first thing you do when you open your eyes in the morning? I wish I could tell you that I open my eyes at the first ring my old-school alarm clock straight out of a 2000's movie and jump headfirst into my day. No hesitation, no screens, and no delay. 
+What's the first thing you do when you wake up in the morning? I wish I could tell you that I open my eyes at the first ring my old-school alarm clock, straight out of a 2000's movie, and jump headfirst into seizing the day. No hesitation, no screens, and no delay. 
 
 My mornings typically look more like reaching for the Snooze or Dismiss button on my phone's alarm app, and once awake, immediately checking my email to catch up on any messages I missed. Often, in an attempt to replace the social media dopamine craving first thing in the morning, I tap into my news apps, only to feel overwhelmed by the abundance of information and the headlines' striking negativity.
 

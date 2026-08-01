@@ -150,7 +150,9 @@ Starting points — adjust after a few real digests:
 
 See [`INDEX.md`](INDEX.md). Design walkthrough and interview notes live under [`docs/`](docs/).
 
-## Demo {coming soon!}
+## Demo 
+{coming soon!}
+
 
 ## Future improvements
 - Digest history web UI — a lightweight React frontend to browse past digests without hitting the API directly

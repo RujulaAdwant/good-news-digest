@@ -149,3 +149,12 @@ Starting points — adjust after a few real digests:
 ## Project layout
 
 See [`INDEX.md`](INDEX.md). Design walkthrough and interview notes live under [`docs/`](docs/).
+
+Demo {coming soon!}
+
+Future improvements
+- Digest history web UI — a lightweight React frontend to browse past digests without hitting the API directly
+- Feedback loop — thumbs up/down per article, feeding into per-source or per-topic filtering over time
+- Topic clustering — group digest picks by theme (e.g. science, climate, innovation) using the same embeddings already computed for deduplication
+- Multi-user support — Google OAuth + per-user source preferences and delivery times
+- Fine-tuned sentiment model — once enough feedback data exists, move beyond off-the-shelf DistilBERT toward a model tuned specifically on constructive-news examples

@@ -156,7 +156,10 @@ Starting points — adjust after a few real digests:
 See [`INDEX.md`](INDEX.md). Design walkthrough and interview notes live under [`docs/`](docs/).
 
 ## Demo 
-{coming soon!}
+<img width="1175" height="629" alt="image" src="https://github.com/user-attachments/assets/2dbe0cc7-ad1e-497d-80d7-4547f0075b1b" />
+<img width="1175" height="629" alt="image" src="https://github.com/user-attachments/assets/1b1e860e-837e-4a1c-bf6c-f945a8eeb3f4" />
+<img width="1175" height="629" alt="image" src="https://github.com/user-attachments/assets/7343ec80-68bb-48a2-9598-fc1395377b3a" />
+
 
 
 ## Future improvements
